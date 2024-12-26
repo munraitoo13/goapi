@@ -7,30 +7,22 @@ import (
 	db "github.com/munraitoo13/goapi/database"
 )
 
-// pointer to request and response writer to the response (w write, r read)
+// handle all client methods
 func HandleClientProfile(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		GetClient(w, r)
+		GetClient(w, r) // if req is get
 	case http.MethodPatch:
-		PatchClient(w, r)
+		PatchClient(w, r) // if req is patch
 	default:
-		http.Error(w, "Method not allowed.", http.StatusMethodNotAllowed)
+		http.Error(w, "Method not allowed.", http.StatusMethodNotAllowed) // if req is not the 2 above
 	}
 }
 
 func GetClient(w http.ResponseWriter, r *http.Request) {
-	var clientId = r.URL.Query().Get("clientId") // gets the url query
-	client, ok := db.Clients[clientId]           // gets the client from db
+	client := r.Context().Value("client").(db.Client) // gets the client from middleware context
 
-	// chekcs for errors or empty query
-	if !ok || clientId == "" {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-
-	// sets the header type
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json") // sets the header type
 
 	// response to be written
 	response := db.Client{
@@ -40,37 +32,29 @@ func GetClient(w http.ResponseWriter, r *http.Request) {
 		Age:   client.Age,
 	}
 
-	// encodes the response to
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(response) // writes the encoded response to client
 }
 
 func PatchClient(w http.ResponseWriter, r *http.Request) {
-	var clientId = r.URL.Query().Get("clientId") // gets clientId query
-	client, ok := db.Clients[clientId]           // gets the client
+	client := r.Context().Value("client").(db.Client) // gets the client from middleware context
 
-	// validate client
-	if !ok || clientId == "" {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
+	var payloadData db.Client                           // initialize payload data
+	err := json.NewDecoder(r.Body).Decode(&payloadData) // decode the json payload and add err var
 
-	// decode payload and treats error
-	var payloadData db.Client
-	err := json.NewDecoder(r.Body).Decode(&payloadData)
+	// check for errors
 	if err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close() // closes the body after reading because it's a stream of data
 
-	// changes the values
+	defer r.Body.Close() // closes the body stream after read
+
+	// changes the values on local variable
 	client.Email = payloadData.Email
 	client.Age = payloadData.Age
 	client.Name = payloadData.Name
 
-	// updates client in db with local client
-	db.Clients[clientId] = client
+	db.Clients[client.Id] = client // updates client in db with local variable
 
-	// writes success status
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusOK) // writes success status
 }
